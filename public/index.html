@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>실시간 GPS 관제 & 동선 트래커 - GeoLive</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Local Pure JS QRCode Generator (Zero-fail) -->
+  <script src="js/qrcode.min.js?v=2.4"></script>
+  <!-- Custom CSS -->
+  <link rel="stylesheet" href="css/style.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 h-screen w-screen overflow-hidden flex flex-col select-none">
+
+  <!-- ======================================================== -->
+  <!-- TOP NAVIGATION BAR                                       -->
+  <!-- ======================================================== -->
+  <header class="h-16 bg-slate-900/95 border-b border-slate-800 px-3 sm:px-4 flex items-center justify-between z-30 backdrop-blur-md">
+    <!-- Logo & Title -->
+    <div class="flex items-center space-x-2.5">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/25">
+        <i data-lucide="satellite" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <span class="font-extrabold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-indigo-300 to-cyan-400">GeoLive</span>
+          <span id="backend-status-badge" class="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> 실시간 관제
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 hidden md:block">실시간 위치 추적 & 시간대별 동선 분석 플랫폼</p>
+      </div>
+    </div>
+
+    <!-- Center Mode Switcher Tabs -->
+    <div class="flex items-center bg-slate-800/90 p-1 rounded-xl border border-slate-700/80 shadow-inner">
+      <button id="btn-tab-realtime" onclick="switchMode('realtime')" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 bg-blue-600 text-white shadow-md">
+        <i data-lucide="crosshair" class="w-4 h-4"></i>
+        <span>실시간 추적</span>
+      </button>
+      <button id="btn-tab-history" onclick="switchMode('history')" class="px-3.5 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition-all flex items-center gap-1.5 text-slate-300 hover:text-white">
+        <i data-lucide="history" class="w-4 h-4"></i>
+        <span>동선 히스토리</span>
+      </button>
+    </div>
+
+    <!-- Right Controls & User Profile -->
+    <div class="flex items-center space-x-1.5 sm:space-x-2.5">
+      <!-- Device Selector Dropdown -->
+      <div class="relative">
+        <select id="device-select" onchange="onDeviceChange(this.value)" class="bg-slate-800 border border-slate-700 text-slate-100 text-xs sm:text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block px-2.5 py-2 pr-7 appearance-none cursor-pointer font-medium hover:bg-slate-750 transition max-w-[150px] sm:max-w-[200px] truncate">
+          <option value="">기기 로딩 중...</option>
+        </select>
+        <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 absolute right-2 top-2.5 pointer-events-none"></i>
+      </div>
+
+      <!-- Add / Manage Devices Button -->
+      <button onclick="openDeviceModal()" title="GPS 기기 관리 및 추가" class="p-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white rounded-lg transition flex items-center gap-1 text-xs font-semibold">
+        <i data-lucide="plus" class="w-4 h-4 text-blue-400"></i>
+        <span class="hidden lg:inline">기기 관리</span>
+      </button>
+
+      <!-- GPS Connect Guide Button -->
+      <button onclick="openGuideModal()" class="px-2.5 sm:px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs sm:text-sm font-bold rounded-lg shadow-lg shadow-emerald-500/20 transition flex items-center gap-1.5">
+        <i data-lucide="smartphone" class="w-4 h-4"></i>
+        <span>내 폰 GPS 연동</span>
+      </button>
+
+      <!-- User Menu -->
+      <div id="user-section" class="flex items-center pl-1 sm:pl-2 border-l border-slate-800">
+        <!-- Injected by JS: Login button or User Profile -->
+      </div>
+    </div>
+  </header>
+
+  <!-- ======================================================== -->
+  <!-- MAIN WORKSPACE & INTERACTIVE MAP                         -->
+  <!-- ======================================================== -->
+  <main class="flex-1 relative overflow-hidden">
+    <!-- Leaflet Map Container -->
+    <div id="map" class="w-full h-full z-10"></div>
+
+    <!-- ======================================================== -->
+    <!-- [NEW FEATURE] LOCATION SEARCH BAR (Top Left Floating)    -->
+    <!-- ======================================================== -->
+    <div class="absolute top-3 left-3 sm:left-4 z-20 w-80 sm:w-96 max-w-[calc(100vw-24px)]">
+      <div class="glass-panel rounded-2xl p-2 border border-slate-700/80 shadow-2xl">
+        <form onsubmit="handleLocationSearch(event)" class="relative flex items-center">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none"></i>
+          <input type="text" id="map-search-input" placeholder="원하는 장소, 주소, 역 검색 (예: 강남역, 여의도, 부산역)" class="w-full bg-slate-900/90 border border-slate-700/70 rounded-xl pl-9 pr-16 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+          <button type="submit" class="absolute right-1.5 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold transition flex items-center gap-1 shadow">
+            이동
+          </button>
+        </form>
+
+        <!-- Quick Landmark Chips -->
+        <div class="flex items-center gap-1.5 mt-2 overflow-x-auto pb-1 text-[11px] no-scrollbar">
+          <span class="text-slate-400 flex-shrink-0 flex items-center gap-0.5"><i data-lucide="map-pin" class="w-3 h-3"></i> 추천:</span>
+          <button type="button" onclick="quickJumpLocation(37.4981, 127.0276, '강남역')" class="px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex-shrink-0 border border-slate-700">강남역</button>
+          <button type="button" onclick="quickJumpLocation(37.5559, 126.9723, '서울역')" class="px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex-shrink-0 border border-slate-700">서울역</button>
+          <button type="button" onclick="quickJumpLocation(37.5759, 126.9768, '광화문')" class="px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex-shrink-0 border border-slate-700">광화문</button>
+          <button type="button" onclick="quickJumpLocation(37.5219, 126.9242, '여의도')" class="px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex-shrink-0 border border-slate-700">여의도</button>
+          <button type="button" onclick="quickJumpLocation(35.1587, 129.1604, '부산 해운대')" class="px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex-shrink-0 border border-slate-700">해운대</button>
+          <button type="button" onclick="quickJumpLocation(33.5104, 126.4914, '제주공항')" class="px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex-shrink-0 border border-slate-700">제주</button>
+        </div>
+
+        <!-- Search Results Dropdown -->
+        <div id="search-results-list" class="hidden search-results-dropdown mt-2 pt-2 border-t border-slate-800 space-y-1">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- MAP CONTROLS & TILE SWITCHER (Top Right Toolbar)         -->
+    <!-- ======================================================== -->
+    <div class="absolute top-3 right-3 sm:right-4 z-20 flex items-center gap-2">
+      <!-- Tile Switcher -->
+      <div class="glass-panel rounded-xl p-1 flex gap-1 shadow-xl">
+        <button id="tile-pos" onclick="setTileLayer('pos')" class="px-2.5 py-1 text-xs rounded-lg font-bold transition bg-blue-600 text-white" title="선명하고 깔끔한 밝은 지도">깔끔 지도</button>
+        <button id="tile-osm" onclick="setTileLayer('osm')" class="px-2.5 py-1 text-xs rounded-lg font-medium transition text-slate-300 hover:text-white" title="기본 상세 도로망 지도">일반 지도</button>
+        <button id="tile-dark" onclick="setTileLayer('dark')" class="px-2.5 py-1 text-xs rounded-lg font-medium transition text-slate-400 hover:text-white" title="야간 다크 모드">야간 다크</button>
+        <button id="tile-sat" onclick="setTileLayer('sat')" class="px-2.5 py-1 text-xs rounded-lg font-medium transition text-slate-400 hover:text-white" title="고화질 실사 위성 사진">위성 사진</button>
+      </div>
+
+      <!-- Toggle HUD Visibility (지도 전체화면 넓게 보기) -->
+      <button onclick="toggleHudVisibility()" id="btn-toggle-hud" class="glass-panel p-2 rounded-xl text-slate-300 hover:text-white shadow-xl transition flex items-center gap-1 text-xs font-semibold" title="계기판 정보창 접기/펼치기">
+        <i data-lucide="eye" class="w-4 h-4 text-cyan-400"></i>
+        <span class="hidden sm:inline">지도 넓게보기</span>
+      </button>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- REALTIME MODE HUD: FLOATING OVERLAY (Right Side)         -->
+    <!-- ======================================================== -->
+    <div id="realtime-hud" class="absolute top-16 sm:top-14 right-3 sm:right-4 z-20 flex flex-col gap-2.5 pointer-events-none max-w-xs sm:max-w-sm w-full transition-all duration-300">
+      <!-- Device Live Status Card -->
+      <div class="glass-panel rounded-2xl p-3.5 sm:p-4 pointer-events-auto border border-slate-700/70 shadow-2xl transition duration-200">
+        <div class="flex items-start justify-between mb-2.5">
+          <div class="flex items-center space-x-2.5">
+            <div id="hud-device-icon-wrap" class="w-9 h-9 rounded-xl bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shadow-md">
+              <i id="hud-device-icon" data-lucide="car" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 id="hud-device-name" class="font-bold text-slate-100 text-sm sm:text-base leading-tight">선택된 기기 없음</h3>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <span id="hud-device-id" class="text-[11px] font-mono text-slate-400">DEV-ID</span>
+                <span id="hud-online-badge" class="px-1.5 py-0.2 text-[10px] font-semibold rounded bg-slate-800 text-slate-300">연결 대기</span>
+              </div>
+            </div>
+          </div>
+          <!-- Battery Pill -->
+          <div id="hud-battery-pill" class="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/90 border border-slate-700 text-xs font-mono text-slate-300">
+            <i data-lucide="battery" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span id="hud-battery-text">--%</span>
+          </div>
+        </div>
+
+        <!-- Big Speedometer HUD -->
+        <div class="bg-slate-900/90 rounded-xl p-2.5 sm:p-3 border border-slate-800 flex items-baseline justify-between mb-2.5">
+          <div>
+            <span class="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wider">실시간 주행 속도</span>
+            <div class="flex items-baseline gap-1 mt-0.5">
+              <span id="hud-speed-num" class="text-3xl sm:text-4xl font-extrabold font-mono text-blue-400 tracking-tight">0</span>
+              <span class="text-xs font-semibold text-slate-400">km/h</span>
+            </div>
+          </div>
+          <div class="text-right">
+            <span class="text-[10px] sm:text-xs font-medium text-slate-400 uppercase tracking-wider">주행 상태</span>
+            <div id="hud-moving-status" class="text-xs sm:text-sm font-bold text-slate-400 mt-1 flex items-center justify-end gap-1">
+              <span class="w-2 h-2 rounded-full bg-slate-400"></span> 정차 중
+            </div>
+          </div>
+        </div>
+
+        <!-- Telemetry Grid -->
+        <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+          <div class="bg-slate-800/60 rounded-lg p-1.5 px-2 border border-slate-700/40">
+            <span class="text-slate-400 block text-[10px]">위도 / 경도</span>
+            <span id="hud-coord-text" class="font-mono text-slate-200 block truncate font-medium">--.----, --.----</span>
+          </div>
+          <div class="bg-slate-800/60 rounded-lg p-1.5 px-2 border border-slate-700/40">
+            <span class="text-slate-400 block text-[10px]">고도 / 방위각</span>
+            <span id="hud-alt-bearing" class="font-mono text-slate-200 block font-medium">-- m / --°</span>
+          </div>
+          <div class="bg-slate-800/60 rounded-lg p-1.5 px-2 border border-slate-700/40">
+            <span class="text-slate-400 block text-[10px]">GPS 수신 오차</span>
+            <span id="hud-accuracy" class="font-mono text-emerald-400 block font-medium">± -- m</span>
+          </div>
+          <div class="bg-slate-800/60 rounded-lg p-1.5 px-2 border border-slate-700/40">
+            <span class="text-slate-400 block text-[10px]">최종 수신</span>
+            <span id="hud-last-seen" class="text-slate-200 block font-medium">수신 기록 없음</span>
+          </div>
+        </div>
+
+        <!-- Live Controls (Auto Follow & Simulator) -->
+        <div class="mt-2.5 pt-2.5 border-t border-slate-800 flex items-center justify-between gap-2">
+          <button id="btn-auto-follow" onclick="toggleAutoFollow()" class="flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1 bg-blue-600/20 text-blue-300 border border-blue-500/40 hover:bg-blue-600/30">
+            <i data-lucide="crosshair" class="w-3.5 h-3.5"></i>
+            <span>위치 자동 추적: ON</span>
+          </button>
+          <button id="btn-simulator" onclick="toggleSimulator()" class="py-1.5 px-2.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1 bg-purple-600/20 text-purple-300 border border-purple-500/40 hover:bg-purple-600/30" title="기기가 없을 때 가상으로 서울 도심 주행을 시뮬레이션합니다">
+            <i data-lucide="play-circle" class="w-3.5 h-3.5"></i>
+            <span>가상 주행 테스트</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- HISTORY MODE HUD: TIMELINE & FILTER PANEL                -->
+    <!-- ======================================================== -->
+    <div id="history-hud" class="hidden absolute top-16 sm:top-14 left-3 sm:left-4 z-20 max-w-xs sm:max-w-sm w-full">
+      <div class="glass-panel rounded-2xl p-3.5 sm:p-4 border border-slate-700/70 shadow-2xl">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center space-x-2">
+            <i data-lucide="route" class="w-5 h-5 text-indigo-400"></i>
+            <h3 class="font-bold text-slate-100 text-sm sm:text-base">동선 히스토리 조회</h3>
+          </div>
+          <button onclick="fetchHistory()" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1 transition shadow-md">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>조회</span>
+          </button>
+        </div>
+
+        <!-- Quick Time Presets -->
+        <div class="grid grid-cols-4 gap-1 mb-3">
+          <button onclick="setTimePreset('1h')" class="preset-btn px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg text-center transition">최근 1시간</button>
+          <button onclick="setTimePreset('today')" class="preset-btn px-2 py-1 bg-blue-600 text-white text-xs font-medium rounded-lg text-center transition">오늘 전체</button>
+          <button onclick="setTimePreset('yesterday')" class="preset-btn px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg text-center transition">어제</button>
+          <button onclick="setTimePreset('all')" class="preset-btn px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg text-center transition">전체</button>
+        </div>
+
+        <!-- Custom Date Range Inputs -->
+        <div class="space-y-2 mb-3 text-xs">
+          <div>
+            <label class="text-slate-400 block mb-1">시작 일시</label>
+            <input type="datetime-local" id="hist-start-time" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:ring-1 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="text-slate-400 block mb-1">종료 일시</label>
+            <input type="datetime-local" id="hist-end-time" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 font-mono text-xs focus:ring-1 focus:ring-blue-500">
+          </div>
+        </div>
+
+        <!-- History Summary Statistics Cards -->
+        <div id="hist-stats-card" class="bg-slate-900/80 rounded-xl p-2.5 sm:p-3 border border-slate-800 space-y-1.5 text-xs">
+          <div class="flex justify-between items-center">
+            <span class="text-slate-400">총 이동 거리:</span>
+            <span id="stat-distance" class="font-bold font-mono text-emerald-400 text-sm">0.00 km</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-400">총 운행 시간:</span>
+            <span id="stat-duration" class="font-semibold text-slate-200">0분</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-400">평균 / 최고 속도:</span>
+            <span id="stat-speeds" class="font-mono text-slate-200">0.0 / 0.0 km/h</span>
+          </div>
+          <div class="flex justify-between items-center">
+            <span class="text-slate-400">주요 정차 지점:</span>
+            <span id="stat-stops" class="font-semibold text-amber-400">0 곳</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======================================================== -->
+    <!-- BOTTOM TIMELINE CONTROLLER BAR (Visible in History Mode) -->
+    <!-- ======================================================== -->
+    <div id="timeline-bar" class="hidden absolute bottom-5 left-1/2 transform -translate-x-1/2 z-20 w-11/12 max-w-4xl">
+      <div class="glass-panel rounded-2xl p-3.5 sm:p-4 border border-slate-700/80 shadow-2xl">
+        <!-- Top Status & Current Time Info -->
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse"></span>
+            <span class="text-xs font-semibold text-slate-300">동선 타임라인 재생기</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="timeline-current-time" class="text-xs sm:text-sm font-mono font-bold text-blue-400 bg-slate-900/90 px-2.5 py-1 rounded-lg border border-slate-800">
+              --:--:--
+            </span>
+            <span id="timeline-current-speed" class="text-[11px] sm:text-xs font-mono font-semibold text-emerald-400 bg-slate-900/90 px-2 py-1 rounded-lg border border-slate-800">
+              0.0 km/h
+            </span>
+          </div>
+        </div>
+
+        <!-- Timeline Range Slider -->
+        <div class="relative py-1">
+          <input type="range" id="timeline-slider" min="0" max="100" value="0" step="0.1" class="timeline-slider" oninput="onTimelineSlider(this.value)">
+        </div>
+
+        <!-- Playback Controls -->
+        <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-800 text-xs">
+          <!-- Play / Pause & Step Buttons -->
+          <div class="flex items-center space-x-2">
+            <button id="btn-play-pause" onclick="togglePlayHistory()" class="w-8 h-8 rounded-lg bg-blue-600 hover:bg-blue-500 text-white flex items-center justify-center transition shadow-lg shadow-blue-500/20">
+              <i id="icon-play-pause" data-lucide="play" class="w-4 h-4"></i>
+            </button>
+            <button onclick="stepTimeline(-5)" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition" title="5단계 뒤로">
+              <i data-lucide="rewind" class="w-4 h-4"></i>
+            </button>
+            <button onclick="stepTimeline(5)" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition" title="5단계 앞으로">
+              <i data-lucide="fast-forward" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- Speed Multiplier Buttons -->
+          <div class="flex items-center space-x-1 bg-slate-800/80 p-0.5 rounded-lg border border-slate-700">
+            <button onclick="setPlaySpeed(1)" class="speed-btn px-2 py-0.5 rounded font-mono font-medium text-xs bg-blue-600 text-white">1x</button>
+            <button onclick="setPlaySpeed(2)" class="speed-btn px-2 py-0.5 rounded font-mono font-medium text-xs text-slate-300 hover:text-white">2x</button>
+            <button onclick="setPlaySpeed(5)" class="speed-btn px-2 py-0.5 rounded font-mono font-medium text-xs text-slate-300 hover:text-white">5x</button>
+            <button onclick="setPlaySpeed(10)" class="speed-btn px-2 py-0.5 rounded font-mono font-medium text-xs text-slate-300 hover:text-white">10x</button>
+            <button onclick="setPlaySpeed(30)" class="speed-btn px-2 py-0.5 rounded font-mono font-medium text-xs text-slate-300 hover:text-white">30x</button>
+          </div>
+
+          <!-- Start / End Labels -->
+          <div class="text-slate-400 font-mono text-[11px] hidden sm:flex items-center gap-2">
+            <span id="timeline-start-label">시작 시각</span>
+            <span>~</span>
+            <span id="timeline-end-label">종료 시각</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ======================================================== -->
+  <!-- MODAL: LOGIN / REGISTER                                  -->
+  <!-- ======================================================== -->
+  <div id="modal-auth" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex justify-between items-center mb-5">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+            <i data-lucide="shield" class="w-4 h-4 text-white"></i>
+          </div>
+          <h3 id="auth-title" class="text-lg font-bold text-slate-100">로그인</h3>
+        </div>
+        <button onclick="closeAuthModal()" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Auth Tabs: Login vs Register -->
+      <div class="flex bg-slate-800 p-1 rounded-xl mb-4 text-xs font-semibold">
+        <button id="auth-tab-login" onclick="switchAuthTab('login')" class="flex-1 py-1.5 rounded-lg bg-blue-600 text-white transition">로그인</button>
+        <button id="auth-tab-register" onclick="switchAuthTab('register')" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-white transition">회원가입</button>
+      </div>
+
+      <form id="auth-form" onsubmit="handleAuthSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">아이디</label>
+          <input type="text" id="auth-username" required placeholder="예: myuser" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        <div id="auth-nick-wrap" class="hidden">
+          <label class="block text-xs font-medium text-slate-400 mb-1">사용자 닉네임</label>
+          <input type="text" id="auth-nickname" placeholder="예: 관제관 홍길동" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-400 mb-1">비밀번호</label>
+          <input type="password" id="auth-password" required placeholder="4자리 이상" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        </div>
+
+        <div id="auth-error" class="hidden text-xs text-rose-400 bg-rose-500/10 border border-rose-500/20 p-2.5 rounded-lg leading-relaxed"></div>
+        <div id="auth-success" class="hidden text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 p-2.5 rounded-lg leading-relaxed"></div>
+
+        <button type="submit" id="auth-submit-btn" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg text-sm transition shadow-lg shadow-blue-500/25">
+          로그인
+        </button>
+      </form>
+
+      <div class="mt-4 pt-4 border-t border-slate-800 text-center text-xs text-slate-400">
+        기본 관리자 계정: <span class="font-mono text-blue-400 font-bold">admin</span> / 비밀번호: <span class="font-mono text-blue-400 font-bold">admin1234</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODAL: DEVICE MANAGEMENT & ADDITION                      -->
+  <!-- ======================================================== -->
+  <div id="modal-device" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-5">
+        <div class="flex items-center space-x-2">
+          <div class="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+            <i data-lucide="cpu" class="w-4 h-4 text-white"></i>
+          </div>
+          <h3 class="text-lg font-bold text-slate-100">GPS 기기 관리</h3>
+        </div>
+        <button onclick="closeDeviceModal()" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Add New Device Form -->
+      <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700 mb-5">
+        <h4 class="text-sm font-bold text-slate-200 mb-3 flex items-center gap-1.5">
+          <i data-lucide="plus-circle" class="w-4 h-4 text-blue-400"></i>
+          <span>새 GPS 기기 등록</span>
+        </h4>
+        <form onsubmit="handleCreateDevice(event)" class="space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">기기 이름 *</label>
+              <input type="text" id="new-dev-name" required placeholder="예: 패밀리 카, 내 폰" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">기기 ID (선택: 영문/숫자)</label>
+              <input type="text" id="new-dev-id" placeholder="미입력 시 자동 생성" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 font-mono">
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">아이콘 형태</label>
+              <select id="new-dev-icon" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200">
+                <option value="car">🚗 차량 (Car)</option>
+                <option value="phone">📱 스마트폰 (Phone)</option>
+                <option value="walk">🚶 사람 / 보행 (Walk)</option>
+                <option value="bike">🚴 자전거 / 오토바이 (Bike)</option>
+                <option value="pet">🐾 반려동물 (Pet)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">마커 색상</label>
+              <select id="new-dev-color" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200">
+                <option value="#2563EB">🔵 파란색 (Blue)</option>
+                <option value="#10B981">🟢 초록색 (Green)</option>
+                <option value="#8B5CF6">🟣 보라색 (Purple)</option>
+                <option value="#F59E0B">🟡 주황색 (Orange)</option>
+                <option value="#EF4444">🔴 빨간색 (Red)</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-400 mb-1">메모 / 설명</label>
+            <input type="text" id="new-dev-desc" placeholder="기기 위치나 사용 목적" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200">
+          </div>
+          <button type="submit" class="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-lg text-xs transition shadow-md">
+            기기 등록 완료
+          </button>
+        </form>
+      </div>
+
+      <!-- Device List Section -->
+      <div>
+        <h4 class="text-sm font-bold text-slate-200 mb-3 flex items-center gap-1.5">
+          <i data-lucide="list" class="w-4 h-4 text-indigo-400"></i>
+          <span>등록된 내 GPS 기기 목록</span>
+        </h4>
+        <div id="device-list-container" class="space-y-2">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MODAL: GPS INTEGRATION & MOBILE TRACKER GUIDE            -->
+  <!-- ======================================================== -->
+  <div id="modal-guide" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <div class="flex items-center space-x-2">
+          <div class="w-9 h-9 rounded-xl bg-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+            <i data-lucide="radio" class="w-5 h-5 text-white"></i>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-slate-100">GPS 실제 연동 센터 (스마트폰 & 앱)</h3>
+            <p class="text-xs text-slate-400">스마트폰, 전용 앱, IoT GPS 모듈을 실시간으로 연결하는 방법</p>
+          </div>
+        </div>
+        <button onclick="closeGuideModal()" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Guide Sub-tabs -->
+      <div class="flex border-b border-slate-800 space-x-2 sm:space-x-4 mb-4 text-xs sm:text-sm font-medium overflow-x-auto pb-1">
+        <button onclick="switchGuideTab('web')" id="gtab-web" class="pb-2 border-b-2 border-emerald-500 text-emerald-400 flex items-center gap-1.5 font-bold flex-shrink-0">
+          <i data-lucide="smartphone" class="w-4 h-4"></i> 내 폰 웹 브라우저
+        </button>
+        <button onclick="switchGuideTab('tunnel')" id="gtab-tunnel" class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 flex-shrink-0">
+          <i data-lucide="globe" class="w-4 h-4 text-blue-400"></i> 외부 LTE/5G 접속 (HTTPS 터널)
+        </button>
+        <button onclick="switchGuideTab('traccar')" id="gtab-traccar" class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 flex-shrink-0">
+          <i data-lucide="navigation" class="w-4 h-4"></i> Traccar Client 앱
+        </button>
+        <button onclick="switchGuideTab('iot')" id="gtab-iot" class="pb-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 flex items-center gap-1.5 flex-shrink-0">
+          <i data-lucide="cpu" class="w-4 h-4"></i> ESP32 / API
+        </button>
+      </div>
+
+      <!-- Tab 1: Smartphone Web Browser (Zero Install) -->
+      <div id="guide-content-web" class="space-y-4">
+        <!-- Live Public URL / Local Warning Banner -->
+        <div id="guide-public-status-banner"></div>
+
+        <div class="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-3.5 text-xs text-emerald-200">
+          <p class="font-bold text-sm text-emerald-300 mb-1">✨ 별도의 앱 설치가 전혀 필요 없습니다!</p>
+          스마트폰 기본 카메라로 아래 <strong>QR 코드</strong>를 스캔하거나 링크를 열면, 스마트폰의 실제 GPS 센서가 3초마다 현재 위치와 주행 속도를 이 지도 화면으로 실시간 쏩니다.
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center gap-5 bg-slate-800/70 p-4 rounded-xl border border-slate-700">
+          <!-- QR Canvas (Local rendering) -->
+          <div id="tracker-qr-container" class="bg-white p-3 rounded-xl shadow-xl flex-shrink-0 flex flex-col items-center min-w-[160px] min-h-[160px] justify-center">
+            <canvas id="tracker-qr-canvas" class="w-36 h-36"></canvas>
+            <span id="tracker-qr-caption" class="text-[10px] text-slate-500 font-bold mt-1">카메라로 스캔하세요</span>
+          </div>
+
+          <div class="space-y-2.5 flex-1 w-full text-xs">
+            <div>
+              <span class="text-slate-400 font-medium block mb-1">연동 대상 기기:</span>
+              <span id="guide-target-device" class="font-bold text-slate-100 bg-slate-900 px-2 py-1 rounded border border-slate-700 inline-block">기기 선택됨</span>
+            </div>
+
+            <!-- Server Connection Host Configuration -->
+            <div>
+              <span class="text-slate-400 font-medium block mb-1">접속 서버 주소 (HTTPS 공개 주소 또는 Wi-Fi IP):</span>
+              <div class="flex items-center gap-1">
+                <input type="text" id="guide-custom-ip" placeholder="예: https://xxxx.trycloudflare.com 또는 192.168.0.5" class="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-400 font-mono flex-1">
+                <button onclick="updateCustomIpAndQr()" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-semibold flex items-center gap-1 transition">
+                  적용
+                </button>
+              </div>
+              <p class="text-[10px] text-slate-400 mt-1">※ .env의 PUBLIC_URL 또는 Cloudflare 터널 주소가 기본값으로 자동 연동됩니다.</p>
+            </div>
+
+            <div>
+              <span class="text-slate-400 font-medium block mb-1">스마트폰 접속 링크:</span>
+              <div class="flex items-center gap-1">
+                <input type="text" id="guide-tracker-url" readonly class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-blue-400 font-mono">
+                <button onclick="copyTrackerUrl()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold flex items-center gap-1 transition shadow">
+                  <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                  <span>복사</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-xs text-slate-300 space-y-1.5 bg-slate-800/40 p-3 rounded-xl border border-slate-700/50">
+          <div class="font-bold text-slate-100 mb-1">스마트폰 연동 3단계:</div>
+          <p>1. 스마트폰 카메라로 위 QR코드 스캔 (또는 링크를 카톡/문자로 열기)</p>
+          <p>2. 브라우저에서 <strong>"위치 권한 허용"</strong> 팝업이 뜨면 [허용] 클릭</p>
+          <p>3. <strong>[ GPS 실시간 전송 시작 ]</strong> 버튼을 터치하면 이 화면에 즉시 동선이 나타납니다!</p>
+        </div>
+      </div>
+
+      <!-- Tab: Cloudflare HTTPS Tunnel / External LTE 5G -->
+      <div id="guide-content-tunnel" class="hidden space-y-3.5 text-xs">
+        <div class="bg-blue-950/40 border border-blue-500/30 rounded-xl p-3.5 text-blue-200">
+          <p class="font-bold text-sm text-blue-300 mb-1">🌐 외부망(LTE / 5G / 다른 Wi-Fi) 및 HTTPS 연결 가이드</p>
+          스마트폰 브라우저는 보안 정책상 <strong>HTTPS</strong>에서만 GPS 위치 수집을 허용합니다.<br>
+          무료 <strong>Cloudflare Tunnel</strong>을 이용하면 공유기 포트포워딩 없이도 전 세계 어디서나 접속 가능한 안전한 HTTPS 임시 주소를 3초 만에 생성할 수 있습니다!
+        </div>
+
+        <div class="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-2.5 font-mono">
+          <div class="font-bold text-slate-200 font-sans text-xs">1단계: 터널 실행 명령어 (PowerShell 또는 CMD)</div>
+          <div class="bg-slate-900 p-2.5 rounded-lg border border-slate-800 text-emerald-400 text-xs flex items-center justify-between select-all">
+            <span>cloudflared tunnel --url http://localhost:8080</span>
+          </div>
+          <p class="text-[11px] text-slate-400 font-sans">
+            ※ 프로젝트 폴더 내의 <strong class="text-slate-200">start_tunnel.bat</strong>을 더블 클릭하면 자동으로 실행됩니다!
+          </p>
+
+          <div class="font-bold text-slate-200 font-sans text-xs pt-2 border-t border-slate-800">2단계: 생성된 HTTPS 주소 확인 및 등록</div>
+          <p class="text-[11px] text-slate-300 font-sans">
+            터널이 실행되면 콘솔 창에 <strong>https://xxxx-xxxx.trycloudflare.com</strong> 주소가 나타납니다.<br>
+            그 주소를 첫 번째 탭의 <strong>[컴퓨터 IP / 도메인 주소]</strong> 입력란에 붙여넣고 [적용]을 누르면 스마트폰 QR코드가 해당 주소로 즉시 변경됩니다!
+          </p>
+        </div>
+      </div>
+
+      <!-- Tab 2: Traccar Client App -->
+      <div id="guide-content-traccar" class="hidden space-y-4 text-xs">
+        <div class="bg-slate-800/60 p-4 rounded-xl border border-slate-700 space-y-2">
+          <h4 class="font-bold text-slate-100 text-sm">무료 Traccar Client 앱 (백그라운드 상시 추적)</h4>
+          <p class="text-slate-300 leading-relaxed">
+            화면이 꺼져 있거나 다른 앱(유튜브, 내비게이션)을 실행 중일 때도 백그라운드에서 주기적으로 위치를 수신하고 싶다면 구글 플레이 또는 애플 앱스토어에서 <strong>"Traccar Client"</strong>(무료)를 설치하세요.
+          </p>
+        </div>
+
+        <div class="space-y-3 bg-slate-900/90 p-4 rounded-xl border border-slate-800 font-mono">
+          <div>
+            <span class="text-slate-400 block mb-0.5">1. 서버 주소 (Server URL):</span>
+            <div class="flex items-center gap-2">
+              <input type="text" id="traccar-server-url" readonly value="http://192.168.x.x:8080/api/gps/osm" class="flex-1 bg-slate-800 border border-slate-700 rounded px-2.5 py-1.5 text-emerald-400 text-xs">
+              <button onclick="copyTraccarUrl()" class="px-2.5 py-1.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs">복사</button>
+            </div>
+          </div>
+          <div>
+            <span class="text-slate-400 block mb-0.5">2. 기기 식별자 (Device Identifier):</span>
+            <input type="text" id="traccar-dev-id" readonly value="DEV-CAR-101" class="w-full bg-slate-800 border border-slate-700 rounded px-2.5 py-1.5 text-blue-400 text-xs">
+          </div>
+          <div>
+            <span class="text-slate-400 block mb-0.5">3. 위치 수신 주기 (Frequency):</span>
+            <span class="text-slate-300">권장 3초 ~ 5초</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 3: ESP32 / Arduino / IoT / REST API -->
+      <div id="guide-content-iot" class="hidden space-y-3 text-xs">
+        <p class="text-slate-300">
+          차량용 GPS 추적기, 아두이노, ESP32, 라즈베리파이 등 임의의 기기에서 아래 HTTP REST API로 위치 데이터를 전송할 수 있습니다.
+        </p>
+
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 font-mono text-[11px] text-slate-300 overflow-x-auto">
+          <div class="text-blue-400 font-bold mb-1">POST /api/gps/update</div>
+          <div class="text-slate-400 mb-2">Content-Type: application/json</div>
+          <pre class="text-emerald-300">{
+  "deviceId": "DEV-CAR-101",
+  "secretKey": "key-demo-car-101",
+  "lat": 37.5665,
+  "lng": 126.9780,
+  "speed": 45.2,       // km/h
+  "altitude": 35.0,    // meters
+  "bearing": 180.0,    // 0~360 degrees
+  "accuracy": 3.5,     // meters
+  "battery": 85        // 0~100 %
+}</pre>
+        </div>
+
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700">
+          <span class="font-bold text-slate-200 block mb-1">cURL 테스트 명령어:</span>
+          <pre id="curl-sample-code" class="bg-slate-950 p-2 rounded text-[10px] font-mono text-amber-300 overflow-x-auto select-all">curl -X POST http://localhost:8080/api/gps/update -H "Content-Type: application/json" -d "{\"deviceId\":\"DEV-CAR-101\",\"lat\":37.5665,\"lng\":126.9780,\"speed\":30}"</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main JavaScript -->
+  <script src="js/app.js?v=2.4"></script>
+</body>
+</html>

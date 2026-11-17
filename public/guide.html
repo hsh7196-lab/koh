@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>실시간 GPS 연동 가이드 센터 - GeoLive</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-6 md:p-12 font-sans">
+  <div class="max-w-4xl mx-auto space-y-8">
+    
+    <!-- Top Header -->
+    <div class="flex items-center justify-between border-b border-slate-800 pb-6">
+      <div class="flex items-center space-x-3">
+        <div class="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+          <i data-lucide="satellite" class="w-6 h-6 text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold text-slate-100">GPS 실제 연동 매뉴얼 & API 가이드</h1>
+          <p class="text-sm text-slate-400">다양한 기기(스마트폰, 트래커 앱, IoT 모듈)를 GeoLive 서버에 연결하는 방법</p>
+        </div>
+      </div>
+      <a href="/" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-sm font-semibold transition flex items-center gap-2">
+        <i data-lucide="arrow-left" class="w-4 h-4"></i> 관제 대시보드
+      </a>
+    </div>
+
+    <!-- Section 1: Mobile Web Tracker -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+      <div class="flex items-center space-x-3">
+        <span class="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center font-bold text-sm">1</span>
+        <h2 class="text-lg font-bold text-slate-100">방법 1: 스마트폰 웹 브라우저 (앱 설치 불필요, 10초 완료!)</h2>
+      </div>
+      <p class="text-sm text-slate-300 leading-relaxed">
+        별도의 앱을 다운로드할 필요 없이 스마트폰의 Safari, Chrome 등의 브라우저에서 HTML5 Geolocation API 센서를 활성화하여 실시간 위치를 서버로 쏩니다.
+      </p>
+      <div class="bg-slate-950/70 p-4 rounded-xl border border-slate-800 text-xs space-y-2 text-slate-300 font-mono">
+        <div><strong>접속 주소:</strong> <code>http://[컴퓨터_IP]:8080/tracker.html?deviceId=기기ID&secretKey=보안키</code></div>
+        <div><strong>특징:</strong> 화면 켜짐 유지(WakeLock) 내장, 1~10초 주기 설정 가능, 즉시 지도에 위치 표시</div>
+      </div>
+      <ol class="list-decimal list-inside text-sm text-slate-300 space-y-1">
+        <li>스마트폰과 관제 서버를 실행 중인 PC를 <strong>동일한 Wi-Fi 네트워크</strong>에 연결합니다.</li>
+        <li>대시보드 상단의 <strong>[내 폰 GPS 연동]</strong> 버튼을 눌러 나타나는 QR 코드를 스마트폰 카메라로 스캔합니다.</li>
+        <li>브라우저에서 <strong>"위치 정보 제공 허용"</strong>을 승인하고 <strong>[GPS 실시간 전송 시작]</strong> 버튼을 누릅니다.</li>
+      </ol>
+    </div>
+
+    <!-- Section 2: Traccar Client App -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+      <div class="flex items-center space-x-3">
+        <span class="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center font-bold text-sm">2</span>
+        <h2 class="text-lg font-bold text-slate-100">방법 2: Traccar Client 전용 앱 (스마트폰 백그라운드 추적)</h2>
+      </div>
+      <p class="text-sm text-slate-300 leading-relaxed">
+        화면을 끄거나 다른 앱(유튜브, 네비게이션)을 실행 중일 때도 백그라운드에서 주기적으로 위치를 수신하고 싶다면 전 세계 표준 GPS 트래커 앱인 <strong>Traccar Client</strong>(무료)를 사용하십시오.
+      </p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
+        <div class="bg-slate-950/70 p-4 rounded-xl border border-slate-800 space-y-2">
+          <div class="font-bold text-blue-400 text-sm mb-1">앱 다운로드</div>
+          <div>• Android: 구글 Play 스토어에서 "Traccar Client" 검색</div>
+          <div>• iOS: 애플 App Store에서 "Traccar Client" 검색</div>
+        </div>
+        <div class="bg-slate-950/70 p-4 rounded-xl border border-slate-800 space-y-2">
+          <div class="font-bold text-emerald-400 text-sm mb-1">앱 내 설정 값</div>
+          <div>• 서버 주소: <code>http://[서버IP]:8080/api/gps/osm</code></div>
+          <div>• 기기 식별자: 등록한 기기 ID (예: <code>DEV-CAR-101</code>)</div>
+          <div>• 위치 주기: <code>3</code> 또는 <code>5</code> 초</div>
+          <div>• 상태(서비스 상태): ON으로 토글</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 3: ESP32 / Arduino / Hardware GPS Module -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+      <div class="flex items-center space-x-3">
+        <span class="w-8 h-8 rounded-lg bg-purple-600/20 text-purple-400 flex items-center justify-center font-bold text-sm">3</span>
+        <h2 class="text-lg font-bold text-slate-100">방법 3: 하드웨어 GPS 모듈 (ESP32, 아두이노, 차량용 OBD)</h2>
+      </div>
+      <p class="text-sm text-slate-300 leading-relaxed">
+        LTE-M 모뎀이나 Wi-Fi가 탑재된 마이크로컨트롤러(ESP32 + NEO-6M GPS)를 사용해 차량이나 자전거에 상시 장착할 수 있습니다.
+      </p>
+      <div class="bg-slate-950 p-4 rounded-xl border border-slate-800 font-mono text-xs text-slate-300 overflow-x-auto">
+        <div class="text-purple-400 font-bold mb-2">// ESP32 C++ HTTP POST Sample</div>
+        <pre>#include &lt;WiFi.h&gt;
+#include &lt;HTTPClient.h&gt;
+
+void sendGpsLocation(float lat, float lng, float speed) {
+  HTTPClient http;
+  http.begin("http://192.168.0.50:8080/api/gps/update");
+  http.addHeader("Content-Type", "application/json");
+
+  String json = "{\"deviceId\":\"DEV-CAR-101\",\"secretKey\":\"key-demo-car-101\""
+                ",\"lat\":" + String(lat, 6) +
+                ",\"lng\":" + String(lng, 6) +
+                ",\"speed\":" + String(speed, 1) + "}";
+
+  int httpCode = http.POST(json);
+  http.end();
+}</pre>
+      </div>
+    </div>
+
+    <!-- Section 4: REST API Specification -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+      <div class="flex items-center space-x-3">
+        <span class="w-8 h-8 rounded-lg bg-amber-600/20 text-amber-400 flex items-center justify-center font-bold text-sm">4</span>
+        <h2 class="text-lg font-bold text-slate-100">REST API 규격서</h2>
+      </div>
+      
+      <div class="space-y-4 text-xs font-mono">
+        <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+          <div class="text-blue-400 font-bold text-sm mb-1">POST /api/gps/update</div>
+          <p class="text-slate-400 font-sans text-xs mb-2">실시간 GPS 좌표 수신 엔드포인트</p>
+          <pre class="text-emerald-300">{
+  "deviceId": "DEV-CAR-101",
+  "secretKey": "key-demo-car-101",
+  "lat": 37.5665,
+  "lng": 126.9780,
+  "speed": 45.2,
+  "altitude": 32.5,
+  "bearing": 180.0,
+  "accuracy": 4.2,
+  "battery": 90,
+  "timestamp": 1730600000000
+}</pre>
+        </div>
+
+        <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+          <div class="text-blue-400 font-bold text-sm mb-1">GET /api/gps/history?deviceId=DEV-CAR-101&from=...&to=...</div>
+          <p class="text-slate-400 font-sans text-xs mb-2">특정 시간 범위의 동선 좌표 및 주행 통계, 정차 지점 반환</p>
+          <pre class="text-amber-300">{
+  "deviceId": "DEV-CAR-101",
+  "count": 140,
+  "totalDistanceKm": 14.85,
+  "maxSpeed": 68.4,
+  "avgSpeed": 38.2,
+  "durationMillis": 2400000,
+  "stops": [ { "lat": 37.56, "lng": 126.97, "durationMinutes": 12 } ],
+  "points": [ ... ]
+}</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>lucide.createIcons();</script>
+</body>
+</html>

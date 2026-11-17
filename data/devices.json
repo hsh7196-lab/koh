@@ -1,0 +1,4 @@
+[
+  {"id":"DEV-CAR-101","owner":"admin","name":"내 승용차 (GV70)","description":"출퇴근 및 주말 드라이브용 차량","color":"#2563EB","icon":"car","secretKey":"key-demo-car-101","createdAt":1793680745897,"lastSeen":1793684600034},
+  {"id":"DEV-PHONE-202","owner":"admin","name":"내 스마트폰 (Galaxy S24)","description":"개인 휴대용 스마트폰 실시간 위치","color":"#10B981","icon":"walk","secretKey":"key-demo-phone-202","createdAt":1793680745897,"lastSeen":0}
+]

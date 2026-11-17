@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>스마트폰 GPS 송신기 - GeoLive Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between p-4 font-sans select-none">
+
+  <!-- Header -->
+  <header class="flex items-center justify-between pb-3 border-b border-slate-800">
+    <div class="flex items-center space-x-2.5">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+        <i data-lucide="radio" class="w-5 h-5 text-white"></i>
+      </div>
+      <div>
+        <h1 class="text-base font-bold text-slate-100 leading-tight">내 폰 GPS 송신기</h1>
+        <p class="text-[11px] text-slate-400">관제 서버로 실시간 위치 전송</p>
+      </div>
+    </div>
+    <!-- Status badge -->
+    <div id="tx-status-badge" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full bg-slate-500"></span> 전송 대기
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 my-3 space-y-3 flex flex-col justify-center">
+
+    <!-- HTTPS Warning Banner (Shown if accessed via plain HTTP from mobile) -->
+    <div id="https-warning-banner" class="hidden bg-amber-950/60 border border-amber-500/50 rounded-2xl p-3 text-xs text-amber-200">
+      <div class="flex items-start gap-2">
+        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5"></i>
+        <div>
+          <strong class="font-bold text-amber-300 block mb-0.5">스마트폰 브라우저 보안 알림</strong>
+          스마트폰 브라우저(Safari, Chrome)는 <strong>HTTPS(보안 연결)</strong>에서만 GPS 위치 권한을 허용합니다.<br>
+          만약 권한 요청 창이 뜨지 않는다면, PC 관제 화면의 안내에 따라 <strong>Cloudflare HTTPS 터널 주소</strong>로 접속해주세요.
+        </div>
+      </div>
+    </div>
+
+    <!-- Device Info Card -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs text-slate-400 font-medium">연동 기기 ID</span>
+        <button onclick="toggleConfig()" class="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1">
+          <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+          <span>설정 변경</span>
+        </button>
+      </div>
+      <div class="flex items-center justify-between">
+        <span id="tracker-device-id" class="text-lg font-mono font-bold text-blue-400">DEV-CAR-101</span>
+        <span id="tracker-interval-pill" class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300">3초 주기</span>
+      </div>
+
+      <!-- Config Accordion -->
+      <div id="config-panel" class="hidden mt-3 pt-3 border-t border-slate-800 space-y-2 text-xs">
+        <div>
+          <label class="block text-slate-400 mb-1">기기 ID</label>
+          <input type="text" id="input-device-id" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 font-mono text-xs">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">서버 주소 (예: https://xxxx.trycloudflare.com)</label>
+          <input type="text" id="input-server-url" placeholder="접속 도메인 자동 사용 (비워둠)" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 font-mono text-xs">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">Secret Key (보안 키)</label>
+          <input type="text" id="input-secret-key" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 font-mono text-xs">
+        </div>
+        <div>
+          <label class="block text-slate-400 mb-1">전송 주기</label>
+          <select id="select-interval" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs">
+            <option value="1000">1초 (매우 빠름, 고정밀)</option>
+            <option value="3000" selected>3초 (권장, 안정적)</option>
+            <option value="5000">5초 (배터리 절약)</option>
+            <option value="10000">10초 (저속 주행)</option>
+          </select>
+        </div>
+        <button onclick="saveConfig()" class="w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold text-xs mt-1">
+          설정 저장
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Card -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
+      <!-- Big Speed Gauge -->
+      <div class="flex items-baseline justify-between mb-3 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+        <div>
+          <span class="text-[11px] text-slate-400 block uppercase font-medium">현재 속도</span>
+          <div class="flex items-baseline gap-1">
+            <span id="tx-speed" class="text-4xl font-extrabold font-mono text-emerald-400">0.0</span>
+            <span class="text-xs font-semibold text-slate-400">km/h</span>
+          </div>
+        </div>
+        <div class="text-right">
+          <span class="text-[11px] text-slate-400 block uppercase font-medium">누적 전송</span>
+          <div class="flex items-baseline justify-end gap-1">
+            <span id="tx-count" class="text-2xl font-bold font-mono text-blue-400">0</span>
+            <span class="text-xs text-slate-400">회</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Telemetry Details -->
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div class="bg-slate-800/40 p-2.5 rounded-xl border border-slate-800">
+          <span class="text-slate-400 block text-[11px]">위도 (Lat)</span>
+          <span id="tx-lat" class="font-mono text-slate-200 font-semibold block truncate">--.------</span>
+        </div>
+        <div class="bg-slate-800/40 p-2.5 rounded-xl border border-slate-800">
+          <span class="text-slate-400 block text-[11px]">경도 (Lng)</span>
+          <span id="tx-lng" class="font-mono text-slate-200 font-semibold block truncate">--.------</span>
+        </div>
+        <div class="bg-slate-800/40 p-2.5 rounded-xl border border-slate-800">
+          <span class="text-slate-400 block text-[11px]">GPS 오차</span>
+          <span id="tx-accuracy" class="font-mono text-emerald-400 font-semibold">± -- m</span>
+        </div>
+        <div class="bg-slate-800/40 p-2.5 rounded-xl border border-slate-800">
+          <span class="text-slate-400 block text-[11px]">고도 / 방위</span>
+          <span id="tx-alt-bearing" class="font-mono text-slate-200 font-semibold">-- m / --°</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini Map Preview -->
+    <div class="h-36 rounded-2xl overflow-hidden border border-slate-800 shadow-lg relative">
+      <div id="mini-map" class="w-full h-full"></div>
+      <div class="absolute bottom-2 left-2 z-[400] bg-slate-900/80 px-2 py-0.5 rounded text-[10px] text-slate-400 backdrop-blur-sm">
+        내 폰 실시간 위치 미리보기
+      </div>
+    </div>
+
+    <!-- Master Transmission Toggle Button -->
+    <button id="btn-toggle-transmission" onclick="toggleTransmission()" class="w-full py-4 rounded-2xl font-bold text-base transition duration-200 flex items-center justify-center gap-2 shadow-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-emerald-600/30 active:scale-[0.98]">
+      <i id="btn-icon" data-lucide="play" class="w-5 h-5"></i>
+      <span id="btn-label">GPS 실시간 전송 시작</span>
+    </button>
+
+    <!-- Notice -->
+    <div class="text-[11px] text-slate-400 text-center leading-relaxed">
+      🔒 화면이 꺼지지 않도록 <strong>화면 켜짐 유지(WakeLock)</strong>가 자동으로 활성화됩니다.<br>
+      브라우저를 닫지 마시고 백그라운드 전환을 최소화해주세요.
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="pt-2 border-t border-slate-800/80 text-center text-xs text-slate-500">
+    GeoLive Realtime GPS Platform &bull; <a href="/" class="text-blue-400 underline">관제 대시보드로 이동</a>
+  </footer>
+
+  <script src="js/tracker.js"></script>
+</body>
+</html>
